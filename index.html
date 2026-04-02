@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Simbora Food Park — Financeiro</title>
+  <link rel="shortcut icon" href="https://i.ibb.co/XZ010Lb7/famila.png" type="image/x-icon">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d0b08">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Simbora FP">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"/>
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- OFFLINE BANNER -->
+<div id="offline-banner" class="offline-banner" style="display:none;" onclick="OfflineQueue.drain()">
+  <span class="material-symbols-rounded">cloud_sync</span>
+  <span id="offline-banner-text">Operações aguardando sincronização</span>
+  <span class="material-symbols-rounded" style="font-size:13px;opacity:.7;">touch_app</span>
+</div>
+
+<!-- ===== AUTH SCREEN ===== -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-bg"></div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🍺</div>
+      <h1 class="auth-title">Simbora<br><span>Food Park</span></h1>
+      <p class="auth-subtitle">Gestão Financeira</p>
+    </div>
+    <form id="login-form" class="auth-form" autocomplete="off">
+      <div class="auth-field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" required autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label>Senha</label>
+        <div class="auth-pass-wrap">
+          <input type="password" id="login-pass" placeholder="••••••••" required autocomplete="current-password">
+          <button type="button" class="auth-toggle-pass" onclick="UIAuth.togglePass()">
+            <span class="material-symbols-rounded" id="auth-eye">visibility</span>
+          </button>
+        </div>
+      </div>
+      <div id="auth-error" class="auth-error" style="display:none;"></div>
+      <button type="submit" class="auth-btn" id="auth-submit">
+        <span class="material-symbols-rounded">login</span> Entrar
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app-shell" class="hidden">
+
+  <!-- HEADER -->
+  <header class="main-header">
+    <div class="header-top">
+      <div class="header-brand">
+        <span class="brand-emoji">🍺</span>
+        <div>
+          <h1 class="brand-name">Simbora</h1>
+          <span class="brand-sub">Food Park</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="cambio-rates" id="cambio-rates">
+          <span id="rate-brl-pyg">—</span>
+          <span id="rate-usd-pyg">—</span>
+        </div>
+        <span class="conn-dot conn-dot--online" id="conn-dot" title="Online"></span>
+        <input type="month" id="filter-month" title="Filtrar mês">
+        <div class="user-menu" id="user-menu" onclick="app.toggleUserMenu()">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-dropdown hidden" id="user-dropdown">
+            <div class="user-dropdown-name" id="user-dropdown-name">—</div>
+            <div class="user-dropdown-role" id="user-dropdown-role">—</div>
+            <button class="user-dropdown-btn" onclick="Auth.logout()">
+              <span class="material-symbols-rounded">logout</span> Sair
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-card--receita">
+        <div class="kpi-label"><span class="material-symbols-rounded">trending_up</span> Receitas</div>
+        <strong class="kpi-value" id="kpi-receitas">₲ 0</strong>
+        <div class="kpi-sub" id="kpi-receitas-sub"></div>
+      </div>
+      <div class="kpi-card kpi-card--despesa">
+        <div class="kpi-label"><span class="material-symbols-rounded">trending_down</span> Despesas</div>
+        <strong class="kpi-value" id="kpi-despesas">₲ 0</strong>
+        <div class="kpi-sub" id="kpi-despesas-sub"></div>
+      </div>
+      <div class="kpi-card kpi-card--resultado">
+        <div class="kpi-label"><span class="material-symbols-rounded">account_balance</span> Resultado</div>
+        <strong class="kpi-value" id="kpi-resultado">₲ 0</strong>
+        <div class="kpi-sub" id="kpi-resultado-sub"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- TABS NAV -->
+  <nav class="tabs-nav">
+    <button class="tab-btn active" onclick="app.switchTab('dashboard',this)" data-tab="dashboard">
+      <span class="material-symbols-rounded">insights</span>
+      <span>Dashboard</span>
+    </button>
+    <button class="tab-btn" onclick="app.switchTab('transacoes',this)" data-tab="transacoes">
+      <span class="material-symbols-rounded">receipt_long</span>
+      <span>Movimentações</span>
+    </button>
+    <button class="tab-btn" onclick="app.switchTab('futuras',this)" data-tab="futuras">
+      <span class="material-symbols-rounded">event_upcoming</span>
+      <span>Previstas</span>
+    </button>
+    <button class="tab-btn" onclick="app.switchTab('recorrencias',this)" data-tab="recorrencias">
+      <span class="material-symbols-rounded">autorenew</span>
+      <span>Recorrentes</span>
+    </button>
+  </nav>
+
+  <!-- ===== VIEW: DASHBOARD ===== -->
+  <div id="view-dashboard" class="view-section active-view">
+
+    <div class="dash-section">
+      <div class="concil-card" id="dash-concil" style="display:none;"></div>
+    </div>
+
+    <div class="dash-grid">
+      <!-- Receitas por Fonte -->
+      <div class="chart-card">
+        <h3 class="chart-title">
+          <span class="material-symbols-rounded">pie_chart</span>
+          Receitas por Fonte
+        </h3>
+        <div class="chart-wrap"><canvas id="chartFontes"></canvas></div>
+        <div id="legend-fontes" class="chart-legend"></div>
+      </div>
+
+      <!-- Despesas por Categoria -->
+      <div class="chart-card">
+        <h3 class="chart-title">
+          <span class="material-symbols-rounded">donut_large</span>
+          Despesas por Categoria
+        </h3>
+        <div class="chart-wrap"><canvas id="chartCategorias"></canvas></div>
+        <div id="legend-categorias" class="chart-legend"></div>
+      </div>
+    </div>
+
+    <!-- Próximas Receitas -->
+    <div class="upcoming-card" id="upcoming-revenues-card" style="display:none;">
+      <h3 class="section-title">
+        <span class="material-symbols-rounded">schedule</span>
+        Receitas Previstas (próximas)
+      </h3>
+      <div id="upcoming-revenues-list"></div>
+    </div>
+
+    <!-- Últimas transações -->
+    <div class="recent-card">
+      <h3 class="section-title">
+        <span class="material-symbols-rounded">history</span>
+        Últimas Movimentações
+      </h3>
+      <div id="recent-list"></div>
+    </div>
+
+    <div class="fab-group">
+      <button onclick="app.openModal('RECEITA')" class="fab fab--receita" title="Nova Receita">
+        <span class="material-symbols-rounded">add</span>
+      </button>
+      <button onclick="app.openModal('DESPESA')" class="fab fab--despesa" title="Nova Despesa">
+        <span class="material-symbols-rounded">remove</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== VIEW: MOVIMENTAÇÕES ===== -->
+  <div id="view-transacoes" class="view-section hidden-view">
+    <div class="filter-bar">
+      <button class="chip active" onclick="app.filterTipo('TUDO',this)">Tudo</button>
+      <button class="chip" onclick="app.filterTipo('RECEITA',this)">Receitas</button>
+      <button class="chip" onclick="app.filterTipo('DESPESA',this)">Despesas</button>
+    </div>
+    <div class="search-bar">
+      <span class="material-symbols-rounded">search</span>
+      <input type="text" id="search-input" placeholder="Buscar descrição, fornecedor…" oninput="app.onSearch()">
+    </div>
+    <div id="tx-list" class="tx-list-container"></div>
+    <div class="fab-group">
+      <button onclick="app.printReport()" class="fab fab--print" title="Imprimir">
+        <span class="material-symbols-rounded">print</span>
+      </button>
+      <button onclick="app.openModal('RECEITA')" class="fab fab--receita" title="Nova Receita">
+        <span class="material-symbols-rounded">add</span>
+      </button>
+      <button onclick="app.openModal('DESPESA')" class="fab fab--despesa" title="Nova Despesa">
+        <span class="material-symbols-rounded">remove</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== VIEW: RECEITAS FUTURAS ===== -->
+  <div id="view-futuras" class="view-section hidden-view">
+    <div class="filter-bar">
+      <button class="chip active" onclick="app.filterFutura('TUDO',this)">Todas</button>
+      <button class="chip" onclick="app.filterFutura('ESPERADO',this)">Esperadas</button>
+      <button class="chip" onclick="app.filterFutura('CONFIRMADO',this)">Confirmadas</button>
+      <button class="chip" onclick="app.filterFutura('CANCELADO',this)">Canceladas</button>
+    </div>
+    <div id="futuras-list" class="futuras-container"></div>
+    <div class="fab-group">
+      <button onclick="app.openModal('RECEITA_FUTURA')" class="fab fab--receita" title="Nova Receita Prevista">
+        <span class="material-symbols-rounded">add</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== VIEW: RECORRÊNCIAS ===== -->
+  <div id="view-recorrencias" class="view-section hidden-view">
+    <div class="recorrencias-header">
+      <p class="recorrencias-info">
+        <span class="material-symbols-rounded">info</span>
+        Templates de despesas que se repetem todo mês. Use "Gerar" para lançar no mês atual.
+      </p>
+    </div>
+    <div id="recorrencias-list" class="recorrencias-container"></div>
+    <div class="fab-group">
+      <button onclick="app.openModal('RECORRENCIA')" class="fab fab--despesa" title="Nova Despesa Recorrente">
+        <span class="material-symbols-rounded">add</span>
+      </button>
+    </div>
+  </div>
+
+</div><!-- /app-shell -->
+
+<!-- ===== MODAL ===== -->
+<div id="modal" class="modal-overlay hidden" onclick="app.handleModalOverlayClick(event)">
+  <div class="modal-content" id="modal-content">
+    <div class="modal-header">
+      <h2 id="modal-title">Novo Registro</h2>
+      <button class="modal-close" onclick="app.closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- TIPO DE LANÇAMENTO -->
+      <div class="form-field" id="field-tipo">
+        <label class="form-label">Tipo</label>
+        <div class="tipo-toggle">
+          <button type="button" class="tipo-btn active" id="btn-tipo-receita" onclick="app.setTipo('RECEITA')">
+            <span class="material-symbols-rounded">trending_up</span> Receita
+          </button>
+          <button type="button" class="tipo-btn" id="btn-tipo-despesa" onclick="app.setTipo('DESPESA')">
+            <span class="material-symbols-rounded">trending_down</span> Despesa
+          </button>
+        </div>
+      </div>
+
+      <form id="finance-form" autocomplete="off">
+        <input type="hidden" id="tx-id">
+
+        <!-- DATA + STATUS -->
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">Data</label>
+            <input type="date" id="tx-date" required>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Status</label>
+            <select id="tx-status">
+              <option value="CONCLUIDO">✅ Concluído</option>
+              <option value="PENDENTE">⏳ Pendente</option>
+              <option value="CANCELADO">❌ Cancelado</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- VALOR + MOEDA -->
+        <div class="valor-block">
+          <label class="form-label" style="text-align:center;display:block;">Valor</label>
+          <div class="valor-wrap">
+            <select id="tx-moeda" class="moeda-select" onchange="app.onMoedaChange()">
+              <option value="PYG">₲ PYG</option>
+              <option value="BRL">R$ BRL</option>
+              <option value="USD">$ USD</option>
+            </select>
+            <input type="number" id="tx-valor" placeholder="0" step="0.01" class="input-valor" required>
+          </div>
+          <div class="valor-converted" id="valor-converted" style="display:none;"></div>
+        </div>
+
+        <!-- FONTE (Receita) -->
+        <div class="form-field" id="field-fonte" style="display:none;">
+          <label class="form-label">Fonte de Receita</label>
+          <select id="tx-fonte">
+            <option value="">— selecione —</option>
+          </select>
+        </div>
+
+        <!-- CATEGORIA + FORNECEDOR (Despesa) -->
+        <div id="fields-despesa" style="display:none;">
+          <div class="form-row">
+            <div class="form-field">
+              <label class="form-label">Categoria</label>
+              <select id="tx-categoria">
+                <option value="">— selecione —</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Fornecedor / Prestador</label>
+              <input type="text" id="tx-fornecedor" placeholder="Nome da empresa…">
+            </div>
+          </div>
+          <!-- IVA -->
+          <div class="form-field">
+            <label class="form-label">
+              <span class="material-symbols-rounded" style="font-size:13px;">receipt</span>
+              IVA incluso no valor (opcional)
+            </label>
+            <input type="number" id="tx-iva" placeholder="Ex: 15000" step="0.01" oninput="app.onIvaChange()">
+            <div class="iva-hint" id="iva-hint" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- DESCRIÇÃO -->
+        <div class="form-field">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="tx-descricao" placeholder="Descreva brevemente…">
+        </div>
+
+        <!-- MÉTODO -->
+        <div class="form-field">
+          <label class="form-label">Método de Pagamento</label>
+          <select id="tx-metodo">
+            <option value="Efectivo">💵 Efectivo</option>
+            <option value="Transferência">🏦 Transferência</option>
+            <option value="Cartão Débito">💳 Cartão Débito</option>
+            <option value="Cartão Crédito">💳 Cartão Crédito</option>
+            <option value="Pix">⚡ Pix</option>
+            <option value="Cheque">📄 Cheque</option>
+          </select>
+        </div>
+
+        <!-- PARCELAMENTO (Despesa) -->
+        <div class="form-field" id="field-parcelas" style="display:none;">
+          <label class="form-label">
+            <span class="material-symbols-rounded" style="font-size:13px;">calendar_month</span>
+            Parcelamento
+          </label>
+          <div class="form-row" style="margin-top:4px;">
+            <div class="form-field">
+              <label class="form-label" style="font-size:.68rem;">Parcela</label>
+              <input type="number" id="tx-parcela-atual" value="1" min="1" max="60">
+            </div>
+            <div class="form-field">
+              <label class="form-label" style="font-size:.68rem;">Total de Parcelas</label>
+              <input type="number" id="tx-total-parcelas" value="1" min="1" max="60" onchange="app.onParcelasChange()">
+            </div>
+          </div>
+          <div id="parcelas-preview" class="parcelas-preview" style="display:none;"></div>
+        </div>
+
+        <!-- COMPROVANTE -->
+        <div class="form-field">
+          <label class="form-label">
+            <span class="material-symbols-rounded" style="font-size:13px;">attach_file</span>
+            Comprovante (foto ou PDF)
+          </label>
+          <label class="file-upload-area" id="file-upload-area">
+            <input type="file" id="tx-file" accept="image/*,.pdf" onchange="app.onFileChange(event)" style="display:none;">
+            <div class="file-upload-content" id="file-upload-content">
+              <span class="material-symbols-rounded">cloud_upload</span>
+              <span>Toque para escolher arquivo</span>
+              <span style="font-size:.72rem;opacity:.7;">Imagem ou PDF</span>
+            </div>
+          </label>
+          <div class="upload-progress" id="upload-progress" style="display:none;">
+            <div class="upload-bar" id="upload-bar" style="width:0%"></div>
+            <span id="upload-pct">0%</span>
+          </div>
+          <!-- Preview do comprovante existente -->
+          <div id="comprovante-preview" style="display:none;"></div>
+        </div>
+
+        <!-- CONCILIADO -->
+        <div class="form-field">
+          <label class="concil-toggle">
+            <input type="checkbox" id="tx-conciliado">
+            <span class="toggle-box toggle-box--concil"></span>
+            <div>
+              <span class="toggle-label">✓ Conciliado com extrato</span>
+              <span class="toggle-hint">Valor confirmado no banco</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- OBSERVAÇÕES -->
+        <div class="form-field">
+          <label class="form-label">Observações</label>
+          <input type="text" id="tx-obs" placeholder="Opcional…">
+        </div>
+
+        <!-- AÇÕES -->
+        <div class="modal-actions">
+          <button type="button" id="btn-delete" class="btn-delete hidden" onclick="app.deleteTx()">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+          <button type="submit" class="btn-submit" id="btn-submit">
+            <span class="material-symbols-rounded">save</span> Salvar
+          </button>
+        </div>
+      </form>
+
+      <!-- FORM: RECEITA FUTURA -->
+      <form id="futura-form" autocomplete="off" style="display:none;">
+        <input type="hidden" id="fut-id">
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">Data Prevista</label>
+            <input type="date" id="fut-data" required>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Status</label>
+            <select id="fut-status">
+              <option value="ESPERADO">⏳ Esperado</option>
+              <option value="CONFIRMADO">✅ Confirmado</option>
+              <option value="CANCELADO">❌ Cancelado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="fut-descricao" placeholder="Ex: Aluguel Box A — Março" required>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Fonte de Receita</label>
+          <select id="fut-fonte">
+            <option value="">— selecione —</option>
+          </select>
+        </div>
+        <div class="valor-block">
+          <label class="form-label" style="text-align:center;display:block;">Valor Esperado</label>
+          <div class="valor-wrap">
+            <select id="fut-moeda" class="moeda-select">
+              <option value="PYG">₲ PYG</option>
+              <option value="BRL">R$ BRL</option>
+              <option value="USD">$ USD</option>
+            </select>
+            <input type="number" id="fut-valor" placeholder="0" step="0.01" class="input-valor" required>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="concil-toggle">
+            <input type="checkbox" id="fut-recorrente" onchange="app.onFutRecorrenteChange()">
+            <span class="toggle-box"></span>
+            <div>
+              <span class="toggle-label">🔄 Receita Recorrente</span>
+              <span class="toggle-hint">Repete automaticamente</span>
+            </div>
+          </label>
+        </div>
+        <div class="form-field" id="fut-field-freq" style="display:none;">
+          <label class="form-label">Frequência</label>
+          <select id="fut-frequencia">
+            <option value="MENSAL">📅 Mensal</option>
+            <option value="SEMANAL">📅 Semanal</option>
+            <option value="ANUAL">📅 Anual</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Observações</label>
+          <input type="text" id="fut-obs" placeholder="Opcional…">
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="fut-btn-delete" class="btn-delete hidden" onclick="app.deleteFutura()">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+          <button type="submit" class="btn-submit">
+            <span class="material-symbols-rounded">save</span> Salvar
+          </button>
+        </div>
+      </form>
+
+      <!-- FORM: DESPESA RECORRENTE -->
+      <form id="recorrencia-form" autocomplete="off" style="display:none;">
+        <input type="hidden" id="rec-id">
+        <div class="form-field">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="rec-descricao" placeholder="Ex: Conta de Energia ANDE" required>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">Categoria</label>
+            <select id="rec-categoria">
+              <option value="">— selecione —</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Dia de Vencimento</label>
+            <input type="number" id="rec-dia" placeholder="Ex: 10" min="1" max="31">
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Fornecedor</label>
+          <input type="text" id="rec-fornecedor" placeholder="Nome do fornecedor…">
+        </div>
+        <div class="valor-block">
+          <label class="form-label" style="text-align:center;display:block;">Valor Estimado</label>
+          <div class="valor-wrap">
+            <select id="rec-moeda" class="moeda-select">
+              <option value="PYG">₲ PYG</option>
+              <option value="BRL">R$ BRL</option>
+              <option value="USD">$ USD</option>
+            </select>
+            <input type="number" id="rec-valor" placeholder="0" step="0.01" class="input-valor">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="rec-btn-delete" class="btn-delete hidden" onclick="app.deleteRecorrencia()">
+            <span class="material-symbols-rounded">delete</span>
+          </button>
+          <button type="submit" class="btn-submit">
+            <span class="material-symbols-rounded">save</span> Salvar
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div><!-- /modal -->
+
+<script src="script.js"></script>
+</body>
+</html>
