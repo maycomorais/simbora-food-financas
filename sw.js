@@ -6,7 +6,7 @@
      • Supabase / APIs externas → Network-only (nunca cacheado)
    ============================================================ */
 
-const APP_VERSION  = 'sfp-v2.1';         // ← sobe este número a cada deploy
+const APP_VERSION  = 'sfp-v2.2';         // ← sobe este número a cada deploy
 const FONT_CACHE   = 'sfp-fonts-v1';     // raramente muda; versione só se trocar fonte
 
 const APP_SHELL = [
