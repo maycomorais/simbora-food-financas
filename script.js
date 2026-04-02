@@ -129,21 +129,40 @@ const DriveUpload = {
     if (onProgress) onProgress(40);
 
     // 2. Enviar para o Apps Script
-    const res = await fetch(Config.DRIVE_UPLOAD_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        data:     base64,
-        mimeType: file.type || 'application/octet-stream',
-        fileName: file.name,
-      }),
-    });
+    // IMPORTANTE: sem Content-Type explícito → browser usa text/plain → sem CORS preflight.
+    // Com application/json o browser dispara OPTIONS primeiro; o Apps Script ignora e o
+    // fetch falha com "Failed to fetch". redirect:'follow' trata o redirect para
+    // script.googleusercontent.com que o Apps Script faz automaticamente.
+    const controller = new AbortController();
+    const _timeout   = setTimeout(() => controller.abort(), 30000);
+
+    let res;
+    try {
+      res = await fetch(Config.DRIVE_UPLOAD_URL, {
+        method:   'POST',
+        redirect: 'follow',
+        signal:   controller.signal,
+        body: JSON.stringify({
+          data:     base64,
+          mimeType: file.type || 'application/octet-stream',
+          fileName: file.name,
+        }),
+      });
+    } catch (fetchErr) {
+      clearTimeout(_timeout);
+      if (fetchErr.name === 'AbortError')
+        throw new Error('Timeout: servidor demorou mais de 30s para responder');
+      throw new Error('Falha de conexão com o servidor de upload. Verifique sua internet.');
+    }
+    clearTimeout(_timeout);
 
     if (onProgress) onProgress(90);
 
-    if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`Erro HTTP ${res.status} — verifique o deploy do Apps Script`);
 
-    const json = await res.json();
+    let json;
+    try { json = await res.json(); }
+    catch { throw new Error('Resposta inválida do Apps Script (não é JSON)'); }
     if (!json.ok) throw new Error(json.error || 'Erro desconhecido no Apps Script');
 
     if (onProgress) onProgress(100);
