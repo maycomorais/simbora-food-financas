@@ -229,10 +229,11 @@ const OfflineQueue = {
 const DB = {
   async fetchTransactions(year, month) {
     if (!State.isOnline) { UIToast.show('Offline — sem novos dados', 'warning'); return []; }
+    const lastDay = new Date(+year, +month, 0).getDate();
     const { data, error } = await _sb.from('transacoes')
       .select('*, fontes_receita(nome,icone,cor), categorias_despesa(nome,icone,cor), profiles!criado_por(nome)')
       .gte('data', `${year}-${month}-01`)
-      .lte('data', `${year}-${month}-31`)
+      .lte('data', `${year}-${month}-${String(lastDay).padStart(2, '0')}`)
       .order('data', { ascending: false })
       .order('created_at', { ascending: false });
     if (error) { UIToast.show('Erro ao buscar: ' + error.message, 'danger'); return []; }

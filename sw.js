@@ -2,8 +2,8 @@
    SIMBORA FOOD PARK — Service Worker v1.0
    ============================================================ */
 
-const CACHE_NAME   = 'sfp-v1';
-const STATIC_CACHE = 'sfp-static-v1';
+const CACHE_NAME   = 'sfp-v2.0';
+const STATIC_CACHE = 'sfp-static-v2.0';
 
 const STATIC_ASSETS = [
   './',
